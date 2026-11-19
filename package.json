@@ -1,0 +1,9 @@
+{
+  "name": "spedition2040",
+  "version": "1.0.0",
+  "description": "Physical-Internet-Planspiel Spedition 2040 (Team 3, SCM 2)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "license": "MIT"
+}

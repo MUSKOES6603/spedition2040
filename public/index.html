@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spedition 2040 – Mitspielen</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  .layout { display: grid; grid-template-columns: 1fr 360px; gap: 18px; align-items: start; }
+  .side { position: sticky; top: 70px; display: grid; gap: 14px; }
+  @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } .side { position: static; } }
+  .join { max-width: 560px; margin: 30px auto; display: grid; gap: 16px; }
+  .rules li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<div id="app"><div class="wrap"><p class="muted">Verbinde …</p></div></div>
+<script src="/common.js"></script>
+<script>
+const G = Game;
+let me = null;
+try { me = JSON.parse(localStorage.getItem('sp2040_me') || 'null'); } catch (e) {}
+let pickTeam = me ? me.team : null;
+let sel = null; // {order, inTruck}
+const app = document.getElementById('app');
+
+function saveMe() { try { localStorage.setItem('sp2040_me', JSON.stringify(me)); } catch (e) {} }
+
+async function join(name, team) {
+  const r = await G.api('join', { name, team });
+  if (r.ok) { me = { name, team }; saveMe(); render(); }
+}
+
+G.on(s => {
+  // Nach Server-Neustart automatisch wieder beitreten
+  if (me && !s.players.some(p => p.name === me.name && p.team === me.team)) G.api('join', me);
+  render();
+});
+G.connect();
+setInterval(() => { const t = document.getElementById('timer'); if (t) updateTimer(t); }, 500);
+setInterval(() => { if (me) G.api('ping'); }, 20000);
+
+function updateTimer(el) {
+  const txt = G.timerText();
+  el.textContent = txt; el.style.display = txt ? '' : 'none';
+  const s = G.state; el.classList.toggle('low', !!(s && s.timerEnds && s.timerEnds - G.now() < 60000));
+}
+
+function orderCard(o, extra = '') {
+  const T = G.meta.teams[o.team];
+  return `<button class="order ${extra}" data-order="${o.id}" style="border-color:${T.color}">
+    <b style="color:${T.color}">${o.id} · ${T.name}</b>
+    <span class="rt">${G.cityName(o.from)} → ${G.cityName(o.to)}</span>
+    <span class="pal">${o.p} Palette${o.p > 1 ? 'n' : ''}</span></button>`;
+}
+
+function render() {
+  const s = G.state, m = G.meta;
+  if (!s || !m) return;
+  if (!me) { if (!document.getElementById('name')) renderJoin(); return; }
+  const T = m.teams[me.team];
+  const top = `<div class="top"><span class="badge" style="background:${T.color}">${T.name} · Depot ${G.cityName(T.depot)}</span>
+    <span>${G.esc(me.name)}</span><span class="grow"></span><span class="phase">${G.phaseName(s.phase)}</span>
+    <span class="timer" id="timer"></span>
+    <button class="ghost" style="color:#fff;padding:6px 10px;border-color:#3A4D78" onclick="if(confirm('Team wechseln?')){me=null;saveMe();render()}">Wechseln</button></div>`;
+  let body = '';
+  if (s.phase === 'lobby') body = renderLobby();
+  else if (s.phase === 'results') body = renderResults();
+  else body = renderRound(s.phase);
+  app.innerHTML = top + body;
+  updateTimer(document.getElementById('timer'));
+  bind();
+}
+
+function renderJoin() {
+  const m = G.meta;
+  app.innerHTML = `<div class="wrap"><div class="join card">
+    <h1>Spedition 2040</h1>
+    <p class="muted">Das Physical-Internet-Planspiel. Gib deinen Namen ein und wähle die Spedition, die dir zugeteilt wurde.</p>
+    <input id="name" placeholder="Dein Vorname" maxlength="24" autocomplete="off">
+    <div class="grid teams">${Object.entries(m.teams).map(([k, t]) =>
+      `<button class="teambtn ${pickTeam === k ? 'sel' : ''}" data-team="${k}" style="background:${t.color}">${t.name}<small>Depot ${G.cityName(t.depot)}</small></button>`).join('')}</div>
+    <button class="orange" id="go">Mitspielen</button></div></div>`;
+  const nameEl = document.getElementById('name');
+  if (window._name) nameEl.value = window._name;
+  nameEl.oninput = () => { window._name = nameEl.value; };
+  app.querySelectorAll('[data-team]').forEach(b => b.onclick = () => { pickTeam = b.dataset.team; renderJoin(); });
+  document.getElementById('go').onclick = () => {
+    if (!nameEl.value.trim()) return G.toast('Bitte Namen eingeben', true);
+    if (!pickTeam) return G.toast('Bitte Spedition wählen', true);
+    join(nameEl.value.trim(), pickTeam);
+  };
+}
+
+function renderLobby() {
+  const s = G.state, m = G.meta;
+  const mates = s.players.filter(p => p.team === me.team).map(p => G.esc(p.name)).join(', ');
+  return `<div class="wrap"><div class="card"><h2>Gleich geht’s los</h2>
+    <p>Dein Team: <b>${mates || '–'}</b></p>
+    <ul class="rules">
+      <li>Ein Lkw fasst <b>${m.cap} Paletten</b>, fährt max. <b>${G.fmt(m.maxKm)} km</b> pro Tour und kehrt zu eurem Depot zurück.</li>
+      <li>Ihr teilt die Aufträge auf Lkw auf, die <b>Route berechnet die App</b> automatisch so kurz wie möglich.</li>
+      <li><b>Runde 1:</b> nur eure eigenen 5 Aufträge. <b>Runde 2:</b> alle 20 Aufträge liegen in einer offenen Frachtbörse.</li>
+      <li>Ziel: alle Aufträge ausliefern, mit möglichst wenigen Kilometern und Leerfahrten.</li>
+      <li>Bedienung: Auftrag antippen, dann Lkw antippen.</li>
+    </ul></div>
+    <div class="card" style="margin-top:14px">${G.mapSvg([])}</div></div>`;
+}
+
+function truckBox(t, round) {
+  const m = G.meta, r = t.result;
+  const target = sel && !t.orders.includes(sel.order) ? 'target' : '';
+  const cls = r ? (r.ok ? 'ok' : 'bad') : '';
+  const chips = t.orders.map(id => {
+    const o = m.orders[id];
+    return `<span class="chip ${sel && sel.order === id ? 'sel' : ''}" data-chip="${id}" style="background:${m.teams[o.team].color}">${id} ${o.from}→${o.to} · ${o.p}P</span>`;
+  }).join('');
+  let info = `<p class="muted" style="margin:0">Leer – Auftrag antippen und dann hier tippen</p>`;
+  if (r && r.ok) info = `<div class="routeline">${G.route(r.route)}</div>
+    <div class="kpis"><span><b>${G.fmt(r.km)}</b> km</span><span><b>${G.fmt(r.emptyKm)}</b> leer</span><span><b>${r.util} %</b> Auslastung</span></div>
+    <div class="bar"><div style="width:${r.util}%"></div></div>`;
+  if (r && !r.ok) info = `<div class="warn">⚠ ${G.esc(r.reason)} – so nicht fahrbar</div>`;
+  return `<div class="truck ${target} ${cls}" data-truck="${t.id}"><h3><span>Lkw ${t.id.split(':')[1]}</span><span class="muted">ab ${G.cityName(m.teams[me.team].depot)}</span></h3>
+    <div class="chips">${chips}</div>${info}</div>`;
+}
+
+function renderRound(round) {
+  const s = G.state, m = G.meta;
+  const ev = s.eval[round], te = ev.teams[me.team], plan = s.plans[round];
+  const all = Object.values(m.orders);
+  const pool = all.filter(o => !plan[o.id] && (round === 'r2' || o.team === me.team));
+  const elsewhere = round === 'r2' ? all.filter(o => plan[o.id] && !plan[o.id].startsWith(me.team + ':')) : [];
+  // Lkw: alle belegten + ein leerer
+  const used = te.trucks.filter(t => t.orders.length);
+  const free = te.trucks.find(t => !t.orders.length);
+  const shown = te.trucks.filter(t => t.orders.length || t === free);
+  const goal = round === 'r1'
+    ? `<b>${te.assignedOwn} / 5</b> eigene Aufträge verplant`
+    : `<b>${ev.total.assigned} / 20</b> Aufträge im Netz verplant`;
+  const totals = `<div class="totals">
+    <div class="card"><div class="v">${G.fmt(te.km)}</div><div class="l">km eures Teams</div></div>
+    <div class="card"><div class="v">${G.fmt(te.emptyKm)}</div><div class="l">davon Leer-km</div></div>
+    <div class="card"><div class="v">${te.tours}</div><div class="l">Touren</div></div>
+    <div class="card"><div class="v">${te.util} %</div><div class="l">Auslastung</div></div></div>`;
+  const allBox = round === 'r2' ? `<div class="card"><h3>Alle Speditionen zusammen</h3>
+    <div class="kpis" style="margin-top:8px"><span><b>${G.fmt(ev.total.km)}</b> km</span><span><b>${G.fmt(ev.total.emptyKm)}</b> leer</span><span><b>${ev.total.tours}</b> Touren</span><span><b>${ev.total.assigned}/20</b> verplant</span></div>
+    <p class="muted" style="margin:8px 0 0">In Runde 2 zählt das gemeinsame Ergebnis. Runde 1 zum Vergleich: ${G.fmt(s.eval.r1.total.km)} km.</p></div>` : '';
+  const routes = te.trucks.filter(t => t.result && t.result.ok).map(t => ({ team: me.team, route: t.result.route }));
+  const help = sel ? `<div class="sticky-help"><span><b>${sel.order}</b> ausgewählt – tippe auf einen Lkw</span><span>
+      ${sel.inTruck ? '<button id="back">Zurück in die Börse</button>' : ''} <button id="cancel" style="background:#fff">Abbrechen</button></span></div>` : '';
+  return `<div class="wrap"><div class="layout"><div>
+    <p style="margin:4px 0 12px">${goal}${round === 'r1' ? ' · nur eigene Aufträge und eigene Lkw' : ' · jeder Lkw darf jede Palette laden'}</p>
+    ${totals}
+    <div class="section-title"><h2>${round === 'r2' ? 'Offene Frachtbörse' : 'Eure offenen Aufträge'}</h2><span class="muted">${pool.length} offen</span></div>
+    <div class="orders">${pool.map(o => orderCard(o, sel && sel.order === o.id ? 'sel' : '')).join('') || '<p class="muted">Alles verplant 👍</p>'}</div>
+    <div class="section-title"><h2>Eure Lkw</h2><span class="muted">${used.length} im Einsatz</span></div>
+    <div class="grid trucks">${shown.map(t => truckBox(t, round)).join('')}</div>
+    ${elsewhere.length ? `<div class="section-title"><h2>Fahren gerade andere Speditionen</h2><span class="muted">zum Verhandeln</span></div>
+      <div class="orders">${elsewhere.map(o => orderCard(o, 'locked').replace('</button>', `<span class="pal" style="display:block">bei ${m.teams[plan[o.id][0]].name}, Lkw ${plan[o.id].split(':')[1]}</span></button>`)).join('')}</div>` : ''}
+    </div><div class="side">${allBox}<div class="card"><h3 style="margin-bottom:6px">Eure Routen</h3>${G.mapSvg(routes, { small: true })}</div>
+    ${round === 'r2' && s.log.length ? `<div class="card log"><h3 style="color:var(--navy);margin-bottom:6px">Frachtbörse</h3>${s.log.slice().reverse().map(l => '<div>' + G.esc(l.text) + '</div>').join('')}</div>` : ''}
+    </div></div></div>${help}`;
+}
+
+function renderResults() {
+  const s = G.state, m = G.meta;
+  const r1 = s.eval.r1, r2 = s.eval.r2;
+  const row = (l, a, b, unit = '') => `<tr><td>${l}</td><td class="num">${a}${unit}</td><td class="num">${b}${unit}</td></tr>`;
+  return `<div class="wrap"><div class="card"><h2>Auswertung</h2>
+    <table style="margin-top:12px"><tr><th>Alle Speditionen</th><th class="num">Runde 1</th><th class="num">Runde 2</th></tr>
+    ${row('Touren', r1.total.tours, r2.total.tours)}${row('Kilometer', G.fmt(r1.total.km), G.fmt(r2.total.km))}
+    ${row('davon leer', G.fmt(r1.total.emptyKm), G.fmt(r2.total.emptyKm))}${row('Auslastung', r1.total.util, r2.total.util, ' %')}</table>
+    ${r1.total.km && r2.total.km ? `<p style="font-size:20px"><b>${Math.round((1 - r2.total.km / r1.total.km) * 100)} % weniger Kilometer</b> durch das gemeinsame Netz.</p>` : ''}
+    <p class="muted">Schaut nach vorne auf den Beamer – gleich besprechen wir, was passiert ist.</p></div></div>`;
+}
+
+function bind() {
+  app.querySelectorAll('[data-order]').forEach(b => b.onclick = () => {
+    if (b.classList.contains('locked')) return G.toast('Dieser Auftrag gehört gerade einem anderen Team – verhandelt!', true);
+    const id = b.dataset.order; sel = sel && sel.order === id ? null : { order: id, inTruck: false }; render();
+  });
+  app.querySelectorAll('[data-chip]').forEach(c => c.onclick = e => {
+    e.stopPropagation(); const id = c.dataset.chip; sel = sel && sel.order === id ? null : { order: id, inTruck: true }; render();
+  });
+  app.querySelectorAll('[data-truck]').forEach(t => t.onclick = async () => {
+    if (!sel) return;
+    const order = sel.order; sel = null; render();
+    await G.api('assign', { order, truck: t.dataset.truck });
+  });
+  const back = document.getElementById('back');
+  if (back) back.onclick = async () => { const order = sel.order; sel = null; render(); await G.api('assign', { order, truck: null }); };
+  const cancel = document.getElementById('cancel');
+  if (cancel) cancel.onclick = () => { sel = null; render(); };
+}
+</script>
+</body>
+</html>

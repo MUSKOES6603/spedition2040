@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spedition 2040 – Beamer</title>
+<link rel="stylesheet" href="/style.css">
+<script src="/qrcode.js"></script>
+<style>
+  body { font-size: 18px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px; background: #E9E3D6; }
+  .controls button { padding: 9px 14px; font-size: 15px; }
+  .controls .sep { width: 1px; background: #C9C0AE; margin: 0 6px; }
+  .controls.hidden { display: none; }
+  .wrap { max-width: 1600px; }
+  .hostgrid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 20px; align-items: start; }
+  .joinbox { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; }
+  .joinurl { font-size: 46px; font-weight: 800; word-break: break-all; color: var(--navy); }
+  .qr svg { width: 260px; height: 260px; display: block; }
+  .tcard { border-left: 10px solid; }
+  .tcard h3 { font-size: 22px; display: flex; justify-content: space-between; }
+  .big { font-size: 64px; font-weight: 800; line-height: 1; }
+  .players { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .players .card h3 { font-size: 22px; margin-bottom: 6px; }
+  .players .n { font-size: 15px; }
+  .timerbig { font-size: 44px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .bars { display: grid; gap: 12px; margin-top: 10px; }
+  .bars .b { display: grid; grid-template-columns: 170px 1fr 120px; gap: 12px; align-items: center; }
+  .bars .fill { height: 34px; border-radius: 8px; }
+  .lock { max-width: 480px; margin: 80px auto; }
+</style>
+</head>
+<body>
+<div id="app"><div class="wrap"><p class="muted">Verbinde …</p></div></div>
+<script src="/common.js"></script>
+<script>
+const G = Game;
+const KEY = new URLSearchParams(location.search).get('key') || '';
+const app = document.getElementById('app');
+let isHost = false;
+
+(async () => {
+  const r = await fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'hostCheck', key: KEY, cid: G.cid }) }).then(r => r.json()).catch(() => ({}));
+  isHost = !!r.ok;
+  render();
+})();
+G.on(render);
+G.connect();
+// hält den Server online wach (Render schläft nach 15 Min. ohne Anfragen ein)
+setInterval(() => { fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'ping', cid: G.cid }) }).catch(() => {}); }, 60000);
+setInterval(() => { const t = document.getElementById('timer'); if (t) t.textContent = G.timerText() || '–'; }, 500);
+
+const host = (action, data = {}) => G.api(action, { key: KEY, ...data });
+function joinUrl() {
+  const s = G.state, m = G.meta;
+  if (s.publicUrl) return s.publicUrl;
+  const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(location.hostname);
+  if (!local) return location.origin; // online (z. B. Render) oder per IP geöffnet
+  return (m.lan && m.lan[0]) || location.origin;
+}
+
+function render() {
+  const s = G.state, m = G.meta;
+  if (!s || !m) return;
+  if (document.activeElement && document.activeElement.id === 'pub') return;
+  const ctr = `<div class="controls ${isHost ? '' : 'hidden'}">
+    <button class="ghost" data-phase="lobby">Warteraum</button>
+    <button data-phase="r1">▶ Runde 1 (12 Min.)</button>
+    <button class="orange" data-phase="r2">▶ Runde 2 (15 Min.)</button>
+    <button data-phase="results">Auswertung</button>
+    <span class="sep"></span>
+    <button class="ghost" data-timer="1">+1 Min.</button>
+    <button class="ghost" data-timer="0">Timer aus</button>
+    <button class="ghost" id="reveal">${s.revealed ? 'Musterlösung ausblenden' : 'Musterlösung zeigen'}</button>
+    <button class="ghost" id="shap">${s.showShapley ? 'Verteilung ausblenden' : 'Faire Verteilung (Shapley)'}</button>
+    <span class="sep"></span>
+    <button class="ghost" id="resetRound">Aktuelle Runde leeren</button>
+    <button class="ghost" id="resetAll">Neues Spiel</button></div>`;
+  const top = `<div class="top"><h2 style="font-size:24px">Spedition 2040</h2><span class="grow"></span>
+    <span class="phase" style="font-size:22px">${G.phaseName(s.phase)}</span>
+    <span class="timer timerbig" id="timer">${G.timerText() || '–'}</span></div>`;
+  let body = '';
+  if (s.phase === 'lobby') body = renderLobby();
+  else if (s.phase === 'results') body = renderResults();
+  else body = renderRound(s.phase);
+  const warn = KEY && !isHost ? `<div class="wrap"><p class="warn">Falscher Schlüssel – Steuerung gesperrt. Nutze den Link aus dem Terminal.</p></div>` : '';
+  app.innerHTML = top + ctr + warn + body;
+  bind();
+  const q = document.getElementById('qr');
+  if (q && window.qrcode) { const qr = qrcode(0, 'M'); qr.addData(joinUrl()); qr.make(); q.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true }); }
+}
+
+function renderLobby() {
+  const s = G.state, m = G.meta;
+  const cols = Object.entries(m.teams).map(([k, t]) => {
+    const ps = s.players.filter(p => p.team === k);
+    return `<div class="card tcard" style="border-color:${t.color}"><h3>${t.name} <span class="muted">${ps.length}</span></h3>
+      <div class="n muted">Depot ${G.cityName(t.depot)}</div><div class="n" style="margin-top:6px">${ps.map(p => G.esc(p.name)).join(', ') || '–'}</div></div>`;
+  }).join('');
+  return `<div class="wrap">
+    <div class="card joinbox" style="margin-bottom:20px"><div class="qr" id="qr"></div>
+      <div><p class="muted" style="margin:0 0 6px">Mitspielen mit Laptop, iPad oder Handy:</p><div class="joinurl">${G.esc(joinUrl())}</div>
+      ${/localhost|127\.0\.0\.1/.test(joinUrl()) ? '<p class="warn">Achtung: „localhost“ funktioniert nur auf diesem Rechner. Unten die WLAN-Adresse (Terminal: ipconfig getifaddr en0) oder eine Online-Adresse eintragen.</p>' : ''}
+      <p class="muted">Namen eingeben und eure Spedition wählen. ${s.players.length} Mitspieler verbunden.</p>
+      ${isHost ? `<div style="display:flex;gap:8px;max-width:760px"><input id="pub" placeholder="Öffentliche Adresse (optional, z. B. https://…trycloudflare.com)" value="${G.esc(s.publicUrl)}"><button id="savepub">Übernehmen</button></div>
+      <p class="muted" style="font-size:14px">Weitere Adressen dieses Rechners: ${(m.lan || []).join(' · ') || '–'}</p>` : ''}</div></div>
+    <div class="players">${cols}</div>
+    <div class="card" style="margin-top:20px"><h3>Spielregeln</h3><p>Lkw fasst ${m.cap} Paletten · max. ${G.fmt(m.maxKm)} km pro Tour · Tour endet am eigenen Depot · Aufträge auf Lkw verteilen, die App berechnet die kürzeste Route.<br>
+    <b>Runde 1:</b> jede Spedition nur mit eigenen Aufträgen. <b>Runde 2:</b> offene Frachtbörse – jeder Lkw darf jede Palette laden.</p></div></div>`;
+}
+
+function teamCards(round) {
+  const s = G.state, m = G.meta, ev = s.eval[round];
+  return Object.entries(m.teams).map(([k, t]) => {
+    const te = ev.teams[k];
+    const online = s.players.filter(p => p.team === k).length;
+    const prog = round === 'r1' ? `${te.assignedOwn}/5 eigene verplant` : `${te.carried} Aufträge an Bord`;
+    return `<div class="card tcard" style="border-color:${t.color}"><h3>${t.name}<span class="muted" style="font-size:16px">${online} Spieler · ${prog}</span></h3>
+      <div class="kpis" style="font-size:16px;margin-top:6px"><span><b>${G.fmt(te.km)}</b> km</span><span><b>${G.fmt(te.emptyKm)}</b> leer</span><span><b>${te.tours}</b> Touren</span><span><b>${te.util} %</b> Auslastung</span>
+      ${te.invalid ? `<span class="warn">${te.invalid} Tour(en) nicht fahrbar</span>` : ''}</div></div>`;
+  }).join('');
+}
+
+function routesOf(round) {
+  const ev = G.state.eval[round]; const out = [];
+  for (const [k, te] of Object.entries(ev.teams)) te.trucks.forEach(t => { if (t.result && t.result.ok) out.push({ team: k, route: t.result.route }); });
+  return out;
+}
+
+function renderRound(round) {
+  const s = G.state, m = G.meta, ev = s.eval[round];
+  const tot = ev.total;
+  return `<div class="wrap"><div class="hostgrid">
+    <div class="card">${G.mapSvg(routesOf(round))}</div>
+    <div class="grid">
+      <div class="card"><div style="display:flex;justify-content:space-between;align-items:end">
+        <div><div class="muted">Alle Speditionen</div><div class="big">${G.fmt(tot.km)} km</div></div>
+        <div style="text-align:right"><div class="muted">${tot.assigned}/20 verplant · ${tot.tours} Touren</div><div style="font-size:28px;font-weight:800">${G.fmt(tot.emptyKm)} Leer-km</div></div></div>
+        ${round === 'r2' && s.eval.r1.total.km ? `<p class="muted" style="margin:8px 0 0">Runde 1: ${G.fmt(s.eval.r1.total.km)} km, ${G.fmt(s.eval.r1.total.emptyKm)} Leer-km</p>` : ''}</div>
+      ${teamCards(round)}
+      ${round === 'r2' && s.log.length ? `<div class="card log"><b style="color:var(--navy)">Frachtbörse</b>${s.log.slice().reverse().map(l => '<div>' + G.esc(l.text) + '</div>').join('')}</div>` : ''}
+    </div></div></div>`;
+}
+
+function renderResults() {
+  const s = G.state, m = G.meta, r1 = s.eval.r1.total, r2 = s.eval.r2.total, S = m.sample;
+  const rev = s.revealed;
+  const max = Math.max(r1.km, r2.km, rev ? S.r1.km : 0, 1);
+  const bar = (label, v, color) => `<div class="b"><b>${label}</b><div class="fill" style="width:${Math.max(2, v / max * 100)}%;background:${color}"></div><span class="num"><b>${G.fmt(v)}</b> km</span></div>`;
+  const row = (l, a, b, c, d, u = '') => `<tr><td>${l}</td><td class="num">${a}${u}</td><td class="num">${b}${u}</td>${rev ? `<td class="num">${c}${u}</td><td class="num">${d}${u}</td>` : ''}</tr>`;
+  const saving = r1.km && r2.km ? Math.round((1 - r2.km / r1.km) * 100) : null;
+  return `<div class="wrap">
+    <div class="card"><h2 style="font-size:32px">${saving !== null ? `${saving} % weniger Kilometer durch das gemeinsame Netz` : 'Auswertung'}</h2>
+      <div class="bars">${bar('Ihr: Runde 1', r1.km, '#8A93A3')}${bar('Ihr: Runde 2', r2.km, '#E8772E')}
+      ${rev ? bar('Muster: Runde 1', S.r1.km, '#C9CED8') + bar('Muster: Runde 2', S.r2.km, '#F6B98A') : ''}</div>
+      <table style="margin-top:18px"><tr><th>Kennzahl</th><th class="num">Ihr: Runde 1</th><th class="num">Ihr: Runde 2</th>${rev ? '<th class="num">Muster R1</th><th class="num">Muster R2</th>' : ''}</tr>
+      ${row('Touren', r1.tours, r2.tours, S.r1.tours, S.r2.tours)}
+      ${row('Kilometer', G.fmt(r1.km), G.fmt(r2.km), G.fmt(S.r1.km), G.fmt(S.r2.km))}
+      ${row('davon leer', G.fmt(r1.emptyKm), G.fmt(r2.emptyKm), G.fmt(S.r1.emptyKm), G.fmt(S.r2.emptyKm))}
+      ${row('Ø Auslastung', r1.util, r2.util, S.r1.util, S.r2.util, ' %')}
+      ${row('Aufträge verplant', r1.assigned + '/20', r2.assigned + '/20', '20/20', '20/20')}</table>
+      ${(r1.invalid || r2.invalid) ? '<p class="warn">Achtung: Einige Touren sind nicht fahrbar und zählen nicht mit.</p>' : ''}</div>
+    <div class="compare" style="margin-top:20px">
+      <div class="card"><h3>Runde 1 · Jeder für sich</h3>${G.mapSvg(routesOf('r1'))}</div>
+      <div class="card"><h3>Runde 2 · Physical Internet</h3>${G.mapSvg(routesOf('r2'))}</div></div>
+    ${s.showShapley ? shapleyCard() : ''}
+    <div class="card" style="margin-top:20px"><h3>Zur Diskussion</h3><ol><li>Was hat die Einsparung möglich gemacht?</li><li>Was hat euch in Runde 2 gebremst?</li><li>Wer sollte die Ersparnis bekommen, und wer haftet, wenn etwas schiefgeht?</li></ol></div></div>`;
+}
+
+function shapleyCard() {
+  const s = G.state, m = G.meta, SH = m.shapley;
+  const saved = Math.max(0, s.eval.r1.total.km - s.eval.r2.total.km);
+  const tot = Object.values(SH.alone).reduce((a, b) => a + b, 0);
+  const rows = Object.entries(m.teams).map(([k, t]) => {
+    const share = SH.value[k] / SH.total;
+    return `<tr><td><b style="color:${t.color}">${t.name}</b></td><td class="num">${G.fmt(SH.alone[k])}</td><td class="num">${G.fmt(Math.round(SH.total / 4))}</td><td class="num">${G.fmt(Math.round(SH.alone[k] / tot * SH.total))}</td><td class="num"><b>${G.fmt(SH.value[k])}</b> (${Math.round(share * 100)} %)</td>${saved ? `<td class="num"><b>${G.fmt(Math.round(share * saved))}</b></td>` : ''}</tr>`;
+  }).join('');
+  return `<div class="card" style="margin-top:20px"><h2 style="font-size:28px">Wer bekommt die Ersparnis? Der Shapley-Wert</h2>
+    <p class="muted">Eingesparte km je Spedition in der Musterlösung (6.090 km gesamt). Shapley-Wert = durchschnittlicher Beitrag über alle Beitrittsreihenfolgen, berechnet aus allen 15 Koalitionen.</p>
+    <table><tr><th>Spedition</th><th class="num">km allein</th><th class="num">gleich verteilt</th><th class="num">nach eigenen km</th><th class="num">Shapley</th>${saved ? '<th class="num">auf eure Ersparnis</th>' : ''}</tr>${rows}</table>
+    ${saved ? `<p class="muted">Ihr habt ${G.fmt(saved)} km gespart. Die letzte Spalte verteilt eure Ersparnis mit den Shapley-Anteilen der Musterlösung.</p>` : ''}</div>`;
+}
+
+function bind() {
+  app.querySelectorAll('[data-phase]').forEach(b => b.onclick = () => {
+    const p = b.dataset.phase;
+    if ((p === 'r1' || p === 'r2') && G.state.phase === p && !confirm('Runde neu starten? Der Timer beginnt von vorn, die Planung bleibt.')) return;
+    host('phase', { phase: p });
+  });
+  app.querySelectorAll('[data-timer]').forEach(b => b.onclick = () => host('timer', { minutes: Number(b.dataset.timer) }));
+  const rv = document.getElementById('reveal'); if (rv) rv.onclick = () => host('reveal');
+  const sh = document.getElementById('shap'); if (sh) sh.onclick = () => { if (G.state.phase !== 'results') host('phase', { phase: 'results' }); host('shapley'); };
+  const rr = document.getElementById('resetRound'); if (rr) rr.onclick = () => {
+    const p = G.state.phase; if (p !== 'r1' && p !== 'r2') return G.toast('Gerade läuft keine Runde.', true);
+    if (confirm('Alle Zuteilungen dieser Runde löschen?')) host('resetRound', { round: p });
+  };
+  const ra = document.getElementById('resetAll'); if (ra) ra.onclick = () => {
+    if (confirm('Neues Spiel starten? Alle Ergebnisse werden gelöscht.')) host('reset', { keepPlayers: confirm('Mitspieler behalten? (OK = ja)') });
+  };
+  const sp = document.getElementById('savepub'); if (sp) sp.onclick = () => host('publicUrl', { url: document.getElementById('pub').value });
+}
+</script>
+</body>
+</html>
