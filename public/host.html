@@ -8,55 +8,111 @@
 <script src="/qrcode.js"></script>
 <style>
   body { font-size: 18px; }
-  .controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px; background: #E9E3D6; }
-  .controls button { padding: 9px 14px; font-size: 15px; }
-  .controls .sep { width: 1px; background: #C9C0AE; margin: 0 6px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px; background: #E9E3D6; align-items: center; }
+  .controls button { padding: 8px 12px; font-size: 15px; }
+  .controls .sep { width: 1px; align-self: stretch; background: #C9C0AE; margin: 0 4px; }
+  .controls .lbl { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .controls button.on { background: #E53E3E; color: #fff; border-color: #E53E3E; }
   .controls.hidden { display: none; }
-  .wrap { max-width: 1600px; }
-  .hostgrid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 20px; align-items: start; }
+  .wrap { max-width: 1680px; }
+  .hostgrid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; align-items: start; }
   .joinbox { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center; }
   .joinurl { font-size: 46px; font-weight: 800; word-break: break-all; color: var(--navy); }
   .qr svg { width: 260px; height: 260px; display: block; }
   .tcard { border-left: 10px solid; }
   .tcard h3 { font-size: 22px; display: flex; justify-content: space-between; }
-  .big { font-size: 64px; font-weight: 800; line-height: 1; }
   .players { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
   .players .card h3 { font-size: 22px; margin-bottom: 6px; }
   .players .n { font-size: 15px; }
   .timerbig { font-size: 44px; font-weight: 800; font-variant-numeric: tabular-nums; }
-  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  .bars { display: grid; gap: 12px; margin-top: 10px; }
-  .bars .b { display: grid; grid-template-columns: 170px 1fr 120px; gap: 12px; align-items: center; }
-  .bars .fill { height: 34px; border-radius: 8px; }
-  .lock { max-width: 480px; margin: 80px auto; }
+  .compare { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .bars { display: grid; gap: 10px; margin-top: 10px; }
+  .bars .b { display: grid; grid-template-columns: 190px 1fr 150px; gap: 12px; align-items: center; }
+  .bars .fill { height: 30px; border-radius: 8px; transition: width .6s; }
+  .hero { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 12px; }
+  .hero .card { padding: 14px 16px; }
+  .hero .v { font-size: 38px; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .hero .main .v { font-size: 54px; }
+  .hero .l { font-size: 14px; color: var(--muted); }
+  .hero .d { font-size: 14px; font-weight: 700; }
+  .lb { display: grid; gap: 10px; }
+  .lbrow { display: grid; grid-template-columns: 54px 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 14px; background: var(--card); box-shadow: 0 4px 14px rgba(20,33,61,.07); border-left: 10px solid; transition: transform .4s; }
+  .lbrow .rank { font-size: 34px; text-align: center; }
+  .lbrow .nm { font-size: 22px; font-weight: 800; }
+  .lbrow .sub { font-size: 14px; color: var(--muted); }
+  .lbrow .pf { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+  .ticker { font-size: 17px; }
+  .ticker div { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .ticker div:first-child { animation: flash 1.2s; font-weight: 700; color: var(--navy); }
+  @keyframes flash { from { background: #FFE7C2; } to { background: transparent; } }
+  .evpills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .evpill { background: #E53E3E; color: #fff; border-radius: 999px; padding: 6px 14px; font-weight: 700; font-size: 16px; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .65; } }
+  #cd { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 70; pointer-events: none; }
+  #cd.show { display: flex; }
+  #cd span { font-size: 38vh; font-weight: 900; color: #E53E3E; text-shadow: 0 0 40px rgba(255,255,255,.9); animation: pop .9s; font-variant-numeric: tabular-nums; }
+  #cd.stop span { font-size: 22vh; color: var(--navy); background: var(--orange); padding: 0 6vh; border-radius: 4vh; text-shadow: none; }
+  @keyframes pop { from { transform: scale(1.6); opacity: 0; } 30% { opacity: 1; } to { transform: scale(1); } }
+  .teamtab td, .teamtab th { padding: 8px 10px; }
 </style>
 </head>
 <body>
 <div id="app"><div class="wrap"><p class="muted">Verbinde …</p></div></div>
+<div id="cd"><span></span></div>
 <script src="/common.js"></script>
 <script>
 const G = Game;
 const KEY = new URLSearchParams(location.search).get('key') || '';
 const app = document.getElementById('app');
 let isHost = false;
+let lastLogId = null, lastPhase = null, lastLeft = null, confettiDone = false;
 
 (async () => {
   const r = await fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'hostCheck', key: KEY, cid: G.cid }) }).then(r => r.json()).catch(() => ({}));
   isHost = !!r.ok;
   render();
 })();
-G.on(render);
+G.on((s) => {
+  // Sounds & Effekte bei Zustandswechsel
+  if (lastPhase !== null && s.phase !== lastPhase) {
+    if (G.isRound(s.phase)) G.sound('start');
+    if (s.phase === 'results' && !confettiDone) { confettiDone = true; setTimeout(() => { G.confetti(); G.sound('fanfare'); }, 300); }
+  }
+  if (s.phase !== 'results') confettiDone = false;
+  lastPhase = s.phase;
+  const newest = s.log.length ? s.log[s.log.length - 1] : null;
+  if (newest && lastLogId !== null && newest.id !== lastLogId && ['deal', 'spot'].includes(newest.kind)) G.sound('deal');
+  lastLogId = newest ? newest.id : 0;
+  G.handleEvent(s.lastEvent, true);
+  render();
+});
 G.connect();
 // hält den Server online wach (Render schläft nach 15 Min. ohne Anfragen ein)
 setInterval(() => { fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'ping', cid: G.cid }) }).catch(() => {}); }, 60000);
-setInterval(() => { const t = document.getElementById('timer'); if (t) t.textContent = G.timerText() || '–'; }, 500);
+
+// Timer, Countdown-Drama
+const cd = document.getElementById('cd');
+setInterval(() => {
+  const t = document.getElementById('timer'); if (t) { t.textContent = G.timerText() || '–'; }
+  const s = G.state; if (!s) return;
+  const left = G.timeLeft();
+  if (left !== null && G.isRound(s.phase)) {
+    if (left !== lastLeft) {
+      if (left <= 10 && left > 0) { cd.className = 'show'; cd.innerHTML = `<span>${left}</span>`; G.sound('tick'); }
+      else if (left === 0 && lastLeft !== null && lastLeft > 0) { cd.className = 'show stop'; cd.innerHTML = '<span>STOPP!</span>'; G.sound('end'); setTimeout(() => { cd.className = ''; }, 3500); }
+      else if (left > 10) cd.className = '';
+      if (t) t.classList.toggle('low', left < 60);
+    }
+  } else if (cd.className !== '' && !cd.classList.contains('stop')) cd.className = '';
+  lastLeft = left;
+}, 250);
 
 const host = (action, data = {}) => G.api(action, { key: KEY, ...data });
 function joinUrl() {
   const s = G.state, m = G.meta;
   if (s.publicUrl) return s.publicUrl;
   const local = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(location.hostname);
-  if (!local) return location.origin; // online (z. B. Render) oder per IP geöffnet
+  if (!local) return location.origin;
   return (m.lan && m.lan[0]) || location.origin;
 }
 
@@ -64,20 +120,27 @@ function render() {
   const s = G.state, m = G.meta;
   if (!s || !m) return;
   if (document.activeElement && document.activeElement.id === 'pub') return;
+  const ev = G.isRound(s.phase) ? s.events[s.phase] : [];
+  const evBtn = id => { const e = m.events[id]; return `<button class="ghost ${e.toggle && ev.includes(id) ? 'on' : ''}" data-event="${id}" title="${G.esc(e.text)}">${e.icon} ${e.title.replace('!', '')}</button>`; };
   const ctr = `<div class="controls ${isHost ? '' : 'hidden'}">
+    <span class="lbl">Ablauf</span>
     <button class="ghost" data-phase="lobby">Warteraum</button>
-    <button data-phase="r1">▶ Runde 1 (12 Min.)</button>
-    <button class="orange" data-phase="r2">▶ Runde 2 (15 Min.)</button>
-    <button data-phase="results">Auswertung</button>
-    <span class="sep"></span>
+    <button data-phase="r1">▶ Runde 1</button>
+    <button class="orange" data-phase="r2">▶ Runde 2</button>
+    <button style="background:#D69E2E;color:#14213D" data-phase="r3">▶ Runde 3 · Hub</button>
+    <button data-phase="results">🏁 Auswertung</button>
     <button class="ghost" data-timer="1">+1 Min.</button>
     <button class="ghost" data-timer="0">Timer aus</button>
-    <button class="ghost" id="reveal">${s.revealed ? 'Musterlösung ausblenden' : 'Musterlösung zeigen'}</button>
-    <button class="ghost" id="shap">${s.showShapley ? 'Verteilung ausblenden' : 'Faire Verteilung (Shapley)'}</button>
     <span class="sep"></span>
-    <button class="ghost" id="resetRound">Aktuelle Runde leeren</button>
-    <button class="ghost" id="resetAll">Neues Spiel</button></div>`;
-  const top = `<div class="top"><h2 style="font-size:24px">Spedition 2040</h2><span class="grow"></span>
+    <button class="ghost" id="snd">${G.soundOn ? '🔊 Sound an' : '🔇 Sound einschalten'}</button>
+    <button class="ghost" id="reveal">${s.revealed ? 'Musterlösung aus' : 'Musterlösung'}</button>
+    <button class="ghost" id="shap">${s.showShapley ? 'Shapley aus' : 'Shapley'}</button>
+    <button class="ghost" id="resetRound">Runde leeren</button>
+    <button class="ghost" id="resetAll">Neues Spiel</button>
+    ${G.isRound(s.phase) ? `<div style="flex-basis:100%;height:0"></div><span class="lbl">Ereignis auslösen</span>
+      ${['stau', 'diesel', 'co2', 'spot', 'panne'].map(evBtn).join('')}
+      <button class="ghost" id="clearEv">Alle aufheben</button>` : ''}</div>`;
+  const top = `<div class="top"><h2 style="font-size:24px">🚚 Spedition 2040</h2><span class="grow"></span>
     <span class="phase" style="font-size:22px">${G.phaseName(s.phase)}</span>
     <span class="timer timerbig" id="timer">${G.timerText() || '–'}</span></div>`;
   let body = '';
@@ -98,28 +161,19 @@ function renderLobby() {
     return `<div class="card tcard" style="border-color:${t.color}"><h3>${t.name} <span class="muted">${ps.length}</span></h3>
       <div class="n muted">Depot ${G.cityName(t.depot)}</div><div class="n" style="margin-top:6px">${ps.map(p => G.esc(p.name)).join(', ') || '–'}</div></div>`;
   }).join('');
+  const E = m.econ;
   return `<div class="wrap">
     <div class="card joinbox" style="margin-bottom:20px"><div class="qr" id="qr"></div>
       <div><p class="muted" style="margin:0 0 6px">Mitspielen mit Laptop, iPad oder Handy:</p><div class="joinurl">${G.esc(joinUrl())}</div>
-      ${/localhost|127\.0\.0\.1/.test(joinUrl()) ? '<p class="warn">Achtung: „localhost“ funktioniert nur auf diesem Rechner. Unten die WLAN-Adresse (Terminal: ipconfig getifaddr en0) oder eine Online-Adresse eintragen.</p>' : ''}
-      <p class="muted">Namen eingeben und eure Spedition wählen. ${s.players.length} Mitspieler verbunden.</p>
+      ${/localhost|127\.0\.0\.1/.test(joinUrl()) ? '<p class="warn">Achtung: „localhost“ funktioniert nur auf diesem Rechner. Unten die WLAN-Adresse oder eine Online-Adresse eintragen.</p>' : ''}
+      <p class="muted">Namen eingeben und eure Spedition wählen. <b>${s.players.length}</b> Mitspieler verbunden.</p>
       ${isHost ? `<div style="display:flex;gap:8px;max-width:760px"><input id="pub" placeholder="Öffentliche Adresse (optional, z. B. https://…trycloudflare.com)" value="${G.esc(s.publicUrl)}"><button id="savepub">Übernehmen</button></div>
       <p class="muted" style="font-size:14px">Weitere Adressen dieses Rechners: ${(m.lan || []).join(' · ') || '–'}</p>` : ''}</div></div>
     <div class="players">${cols}</div>
     <div class="card" style="margin-top:20px"><h3>Spielregeln</h3><p>Lkw fasst ${m.cap} Paletten · max. ${G.fmt(m.maxKm)} km pro Tour · Tour endet am eigenen Depot · Aufträge auf Lkw verteilen, die App berechnet die kürzeste Route.<br>
-    <b>Runde 1:</b> jede Spedition nur mit eigenen Aufträgen. <b>Runde 2:</b> offene Frachtbörse – jeder Lkw darf jede Palette laden.</p></div></div>`;
-}
-
-function teamCards(round) {
-  const s = G.state, m = G.meta, ev = s.eval[round];
-  return Object.entries(m.teams).map(([k, t]) => {
-    const te = ev.teams[k];
-    const online = s.players.filter(p => p.team === k).length;
-    const prog = round === 'r1' ? `${te.assignedOwn}/5 eigene verplant` : `${te.carried} Aufträge an Bord`;
-    return `<div class="card tcard" style="border-color:${t.color}"><h3>${t.name}<span class="muted" style="font-size:16px">${online} Spieler · ${prog}</span></h3>
-      <div class="kpis" style="font-size:16px;margin-top:6px"><span><b>${G.fmt(te.km)}</b> km</span><span><b>${G.fmt(te.emptyKm)}</b> leer</span><span><b>${te.tours}</b> Touren</span><span><b>${te.util} %</b> Auslastung</span>
-      ${te.invalid ? `<span class="warn">${te.invalid} Tour(en) nicht fahrbar</span>` : ''}</div></div>`;
-  }).join('');
+    <b>Geld:</b> Der Kunde zahlt ${String(E.rate).replace('.', ',')} € je Palette und Direkt-km. Jeder km kostet ${G.fmt(E.costKm)} € + CO₂ (${String(E.co2Km).replace('.', ',')} kg/km × ${E.co2Price} €/t), jeder Lkw ${E.tourFix} € Fixkosten. Nicht gefahrene Aufträge: ${E.penalty} € Vertragsstrafe.<br>
+    <b>Runde 1:</b> jede Spedition nur mit eigenen Aufträgen. <b>Runde 2:</b> offene Frachtbörse – ihr legt Frachtpreise fest und fahrt füreinander. <b>Runde 3:</b> zusätzlich PI-Hub in Frankfurt zum Umschlagen (${E.hubFee} €/Palette).<br>
+    <b>Achtung:</b> Die Spielleitung kann jederzeit Ereignisse auslösen. 😈</p></div></div>`;
 }
 
 function routesOf(round) {
@@ -128,44 +182,88 @@ function routesOf(round) {
   return out;
 }
 
+function leaderboard(round) {
+  const s = G.state, m = G.meta, ev = s.eval[round];
+  const rows = Object.entries(ev.teams).sort((a, b) => b[1].profit - a[1].profit);
+  const medals = ['🥇', '🥈', '🥉', '4'];
+  return `<div class="lb">${rows.map(([k, te], i) => {
+    const online = s.players.filter(p => p.team === k).length;
+    const broken = te.trucks.filter(t => t.broken).length;
+    return `<div class="lbrow" style="border-color:${m.teams[k].color}"><div class="rank">${medals[i]}</div>
+      <div><div class="nm" style="color:${m.teams[k].color}">${m.teams[k].name}</div>
+      <div class="sub">${online} Spieler · ${G.fmt(te.km)} km · ${G.fmt(te.emptyKm)} leer · ${te.tours} Lkw · ${te.util} % Auslastung · ${G.co2(te.co2)} CO₂
+      ${te.invalid ? ` · <span class="warn">${te.invalid} Tour(en) nicht fahrbar</span>` : ''}${broken ? ` · 🔧 ${broken} Panne` : ''}</div></div>
+      <div class="pf" style="color:${te.profit >= 0 ? 'var(--good)' : 'var(--bad)'}">${G.eur(te.profit, true)}</div></div>`;
+  }).join('')}</div>`;
+}
+
 function renderRound(round) {
   const s = G.state, m = G.meta, ev = s.eval[round];
   const tot = ev.total;
-  return `<div class="wrap"><div class="hostgrid">
-    <div class="card">${G.mapSvg(routesOf(round))}</div>
-    <div class="grid">
-      <div class="card"><div style="display:flex;justify-content:space-between;align-items:end">
-        <div><div class="muted">Alle Speditionen</div><div class="big">${G.fmt(tot.km)} km</div></div>
-        <div style="text-align:right"><div class="muted">${tot.assigned}/20 verplant · ${tot.tours} Touren</div><div style="font-size:28px;font-weight:800">${G.fmt(tot.emptyKm)} Leer-km</div></div></div>
-        ${round === 'r2' && s.eval.r1.total.km ? `<p class="muted" style="margin:8px 0 0">Runde 1: ${G.fmt(s.eval.r1.total.km)} km, ${G.fmt(s.eval.r1.total.emptyKm)} Leer-km</p>` : ''}</div>
-      ${teamCards(round)}
-      ${round === 'r2' && s.log.length ? `<div class="card log"><b style="color:var(--navy)">Frachtbörse</b>${s.log.slice().reverse().map(l => '<div>' + G.esc(l.text) + '</div>').join('')}</div>` : ''}
-    </div></div></div>`;
+  const prev = round === 'r2' ? s.eval.r1.total : round === 'r3' ? s.eval.r2.total : null;
+  const delta = (a, b, good) => prev && b ? `<div class="d" style="color:${(a - b) * good > 0 ? 'var(--good)' : 'var(--bad)'}">${a - b > 0 ? '+' : ''}${G.fmt(a - b)} ggü. Vorrunde</div>` : '';
+  const pills = s.events[round].map(id => `<span class="evpill">${m.events[id].icon} ${m.events[id].title.replace('!', '')}</span>`).join('')
+    + (s.broken[round].length ? `<span class="evpill">🔧 Panne: ${s.broken[round].map(t => m.teams[t[0]].name + ' Lkw ' + t.split(':')[1]).join(', ')}</span>` : '');
+  return `<div class="wrap">${pills ? `<div class="evpills">${pills}</div>` : ''}
+    <div class="hero">
+      <div class="card main"><div class="l">Gewinn aller Speditionen</div><div class="v" style="color:${tot.profit >= 0 ? 'var(--good)' : 'var(--bad)'}">${G.eur(tot.profit, true)}</div>${prev && prev.km ? `<div class="d muted">Vorrunde: ${G.eur(prev.profit, true)}</div>` : ''}</div>
+      <div class="card"><div class="l">Kilometer</div><div class="v">${G.fmt(tot.km)}</div>${delta(tot.km, prev && prev.km, -1)}</div>
+      <div class="card"><div class="l">davon Leerfahrt</div><div class="v">${G.fmt(tot.emptyKm)}</div>${delta(tot.emptyKm, prev && prev.km, -1)}</div>
+      <div class="card"><div class="l">CO₂ · Aufträge</div><div class="v">${G.co2(tot.co2)}</div><div class="d">${tot.done}/${tot.active} ausgeliefert · ${tot.tours} Lkw</div></div>
+    </div>
+    <div class="hostgrid" style="margin-top:16px">
+      <div class="card">${G.mapSvg(routesOf(round), { trucks: true, hub: round === 'r3', blocked: G.blockedEdges(round) })}</div>
+      <div class="grid">
+        ${leaderboard(round)}
+        ${s.log.length ? `<div class="card ticker"><b style="color:var(--navy)">📣 Live-Ticker</b>${s.log.slice().reverse().slice(0, 7).map(l => '<div>' + G.esc(l.text) + '</div>').join('')}</div>` : ''}
+      </div></div></div>`;
 }
 
 function renderResults() {
-  const s = G.state, m = G.meta, r1 = s.eval.r1.total, r2 = s.eval.r2.total, S = m.sample;
-  const rev = s.revealed;
-  const max = Math.max(r1.km, r2.km, rev ? S.r1.km : 0, 1);
-  const bar = (label, v, color) => `<div class="b"><b>${label}</b><div class="fill" style="width:${Math.max(2, v / max * 100)}%;background:${color}"></div><span class="num"><b>${G.fmt(v)}</b> km</span></div>`;
-  const row = (l, a, b, c, d, u = '') => `<tr><td>${l}</td><td class="num">${a}${u}</td><td class="num">${b}${u}</td>${rev ? `<td class="num">${c}${u}</td><td class="num">${d}${u}</td>` : ''}</tr>`;
-  const saving = r1.km && r2.km ? Math.round((1 - r2.km / r1.km) * 100) : null;
+  const s = G.state, m = G.meta, S = m.sample, rev = s.revealed;
+  const rounds = ['r1', 'r2', 'r3'].filter(r => s.eval[r].total.km > 0);
+  const names = { r1: 'Runde 1', r2: 'Runde 2', r3: 'Runde 3' };
+  const T = r => s.eval[r].total;
+  const first = rounds[0], last = rounds[rounds.length - 1];
+  let headline = 'Auswertung';
+  if (rounds.length >= 2) {
+    const saving = Math.round((1 - T(last).km / T(first).km) * 100);
+    headline = `${saving} % weniger Kilometer · Gewinn ${G.eur(T(first).profit, true)} → ${G.eur(T(last).profit, true)}`;
+  }
+  const maxKm = Math.max(1, ...rounds.map(r => T(r).km), ...(rev ? ['r1', 'r2', 'r3'].map(r => S[r].km) : []));
+  const colors = { r1: '#8A93A3', r2: '#E8772E', r3: '#D69E2E' };
+  const bar = (label, v, max, color, fmt) => `<div class="b"><b>${label}</b><div class="fill" style="width:${Math.max(2, v / max * 100)}%;background:${color}"></div><span class="num"><b>${fmt(v)}</b></span></div>`;
+  const cols = rounds.map(r => names[r]).concat(rev ? ['Muster R1', 'Muster R2', 'Muster R3'] : []);
+  const vals = (f, fmt = x => x) => rounds.map(r => fmt(f(T(r)))).concat(rev ? ['r1', 'r2', 'r3'].map(r => fmt(f(S[r]))) : []);
+  const row = (l, arr) => `<tr><td>${l}</td>${arr.map(v => `<td class="num">${v}</td>`).join('')}</tr>`;
+  const teamRows = Object.entries(m.teams).map(([k, t]) => `<tr><td><b style="color:${t.color}">${t.name}</b></td>${rounds.map(r => { const p = s.eval[r].teams[k].profit; return `<td class="num" style="color:${p >= 0 ? 'var(--good)' : 'var(--bad)'}"><b>${G.eur(p, true)}</b></td>`; }).join('')}</tr>`).join('');
+  const evNote = rounds.filter(r => s.events[r].length || s.broken[r].length).map(r => `${names[r]}: ${s.events[r].map(id => m.events[id].icon + ' ' + m.events[id].title.replace('!', '')).concat(s.broken[r].length ? ['🔧 ' + s.broken[r].length + ' Panne(n)'] : []).join(', ')}`);
   return `<div class="wrap">
-    <div class="card"><h2 style="font-size:32px">${saving !== null ? `${saving} % weniger Kilometer durch das gemeinsame Netz` : 'Auswertung'}</h2>
-      <div class="bars">${bar('Ihr: Runde 1', r1.km, '#8A93A3')}${bar('Ihr: Runde 2', r2.km, '#E8772E')}
-      ${rev ? bar('Muster: Runde 1', S.r1.km, '#C9CED8') + bar('Muster: Runde 2', S.r2.km, '#F6B98A') : ''}</div>
-      <table style="margin-top:18px"><tr><th>Kennzahl</th><th class="num">Ihr: Runde 1</th><th class="num">Ihr: Runde 2</th>${rev ? '<th class="num">Muster R1</th><th class="num">Muster R2</th>' : ''}</tr>
-      ${row('Touren', r1.tours, r2.tours, S.r1.tours, S.r2.tours)}
-      ${row('Kilometer', G.fmt(r1.km), G.fmt(r2.km), G.fmt(S.r1.km), G.fmt(S.r2.km))}
-      ${row('davon leer', G.fmt(r1.emptyKm), G.fmt(r2.emptyKm), G.fmt(S.r1.emptyKm), G.fmt(S.r2.emptyKm))}
-      ${row('Ø Auslastung', r1.util, r2.util, S.r1.util, S.r2.util, ' %')}
-      ${row('Aufträge verplant', r1.assigned + '/20', r2.assigned + '/20', '20/20', '20/20')}</table>
-      ${(r1.invalid || r2.invalid) ? '<p class="warn">Achtung: Einige Touren sind nicht fahrbar und zählen nicht mit.</p>' : ''}</div>
+    <div class="card"><h2 style="font-size:34px">${headline}</h2>
+      <div class="bars">${rounds.map(r => bar('Ihr: ' + names[r], T(r).km, maxKm, colors[r], v => G.fmt(v) + ' km')).join('')}
+      ${rev ? ['r1', 'r2', 'r3'].map(r => bar('Muster: ' + names[r], S[r].km, maxKm, colors[r] + '77', v => G.fmt(v) + ' km')).join('') : ''}</div>
+      <table style="margin-top:18px"><tr><th>Alle Speditionen</th>${cols.map(c => `<th class="num">${c}</th>`).join('')}</tr>
+      ${row('Gewinn gesamt', vals(x => x.profit, v => G.eur(v, true)))}
+      ${row('Kilometer', vals(x => x.km, G.fmt))}
+      ${row('davon leer', vals(x => x.emptyKm, G.fmt))}
+      ${row('Lkw im Einsatz', vals(x => x.tours))}
+      ${row('Ø Auslastung', vals(x => x.util + ' %'))}
+      ${row('CO₂', vals(x => x.co2, G.co2))}
+      ${row('Aufträge ausgeliefert', rounds.map(r => T(r).done + '/' + T(r).active).concat(rev ? ['20/20', '20/20', '20/20'] : []))}</table>
+      ${evNote.length ? `<p class="muted">Ereignisse: ${evNote.join(' · ')} (Musterlösung ohne Ereignisse)</p>` : ''}
+      ${rounds.some(r => T(r).invalid) ? '<p class="warn">Achtung: Einige Touren sind nicht fahrbar und zählen nicht mit.</p>' : ''}</div>
+    <div class="grid" style="grid-template-columns:1fr 1.4fr;margin-top:20px;align-items:start">
+      <div class="card"><h3>Gewinn je Spedition</h3><table class="teamtab" style="margin-top:10px"><tr><th>Spedition</th>${rounds.map(r => `<th class="num">${names[r]}</th>`).join('')}</tr>${teamRows}</table>
+        <p class="muted" style="font-size:15px">Wer hat vom Netzwerk am meisten profitiert – und war das fair?</p></div>
+      <div class="card"><h3>Zur Diskussion</h3><ol style="margin:8px 0 0">
+        <li>Was hat die Einsparung von Runde 1 zu Runde 2 möglich gemacht?</li>
+        <li>Wie habt ihr die Frachtpreise verhandelt? Wer hatte die stärkste Verhandlungsposition?</li>
+        <li>Was hat der Hub in Runde 3 gebracht – und was kostet so ein Hub in der Realität?</li>
+        <li>Welches Netzwerk hat Störungen (Sperrung, Panne, Spot-Aufträge) besser abgefedert?</li>
+        <li>Wer sollte die Ersparnis bekommen, und wer haftet, wenn etwas schiefgeht?</li></ol></div></div>
     <div class="compare" style="margin-top:20px">
-      <div class="card"><h3>Runde 1 · Jeder für sich</h3>${G.mapSvg(routesOf('r1'))}</div>
-      <div class="card"><h3>Runde 2 · Physical Internet</h3>${G.mapSvg(routesOf('r2'))}</div></div>
-    ${s.showShapley ? shapleyCard() : ''}
-    <div class="card" style="margin-top:20px"><h3>Zur Diskussion</h3><ol><li>Was hat die Einsparung möglich gemacht?</li><li>Was hat euch in Runde 2 gebremst?</li><li>Wer sollte die Ersparnis bekommen, und wer haftet, wenn etwas schiefgeht?</li></ol></div></div>`;
+      ${['r1', 'r2', 'r3'].map(r => `<div class="card"><h3>${names[r]} · ${['Jeder für sich', 'Frachtbörse', 'PI-Hub'][r[1] - 1]}</h3>${G.mapSvg(rev ? S[r].routes : routesOf(r), { hub: r === 'r3', trucks: true })}${rev ? '<p class="muted" style="margin:4px 0 0">Musterlösung</p>' : ''}</div>`).join('')}</div>
+    ${s.showShapley ? shapleyCard() : ''}</div>`;
 }
 
 function shapleyCard() {
@@ -177,23 +275,26 @@ function shapleyCard() {
     return `<tr><td><b style="color:${t.color}">${t.name}</b></td><td class="num">${G.fmt(SH.alone[k])}</td><td class="num">${G.fmt(Math.round(SH.total / 4))}</td><td class="num">${G.fmt(Math.round(SH.alone[k] / tot * SH.total))}</td><td class="num"><b>${G.fmt(SH.value[k])}</b> (${Math.round(share * 100)} %)</td>${saved ? `<td class="num"><b>${G.fmt(Math.round(share * saved))}</b></td>` : ''}</tr>`;
   }).join('');
   return `<div class="card" style="margin-top:20px"><h2 style="font-size:28px">Wer bekommt die Ersparnis? Der Shapley-Wert</h2>
-    <p class="muted">Eingesparte km je Spedition in der Musterlösung (6.090 km gesamt). Shapley-Wert = durchschnittlicher Beitrag über alle Beitrittsreihenfolgen, berechnet aus allen 15 Koalitionen.</p>
+    <p class="muted">Eingesparte km je Spedition in der Musterlösung (${G.fmt(SH.total)} km gesamt, Runde 1 → Runde 2). Shapley-Wert = durchschnittlicher Beitrag über alle Beitrittsreihenfolgen, berechnet aus allen 15 Koalitionen.</p>
     <table><tr><th>Spedition</th><th class="num">km allein</th><th class="num">gleich verteilt</th><th class="num">nach eigenen km</th><th class="num">Shapley</th>${saved ? '<th class="num">auf eure Ersparnis</th>' : ''}</tr>${rows}</table>
-    ${saved ? `<p class="muted">Ihr habt ${G.fmt(saved)} km gespart. Die letzte Spalte verteilt eure Ersparnis mit den Shapley-Anteilen der Musterlösung.</p>` : ''}</div>`;
+    ${saved ? `<p class="muted">Ihr habt in Runde 2 ${G.fmt(saved)} km gespart. Die letzte Spalte verteilt eure Ersparnis mit den Shapley-Anteilen der Musterlösung.</p>` : ''}</div>`;
 }
 
 function bind() {
   app.querySelectorAll('[data-phase]').forEach(b => b.onclick = () => {
     const p = b.dataset.phase;
-    if ((p === 'r1' || p === 'r2') && G.state.phase === p && !confirm('Runde neu starten? Der Timer beginnt von vorn, die Planung bleibt.')) return;
+    if (G.isRound(p) && G.state.phase === p && !confirm('Runde neu starten? Der Timer beginnt von vorn, die Planung bleibt.')) return;
     host('phase', { phase: p });
   });
   app.querySelectorAll('[data-timer]').forEach(b => b.onclick = () => host('timer', { minutes: Number(b.dataset.timer) }));
+  app.querySelectorAll('[data-event]').forEach(b => b.onclick = () => host('event', { id: b.dataset.event }));
+  const ce = document.getElementById('clearEv'); if (ce) ce.onclick = () => { if (confirm('Alle Ereignisse und Pannen dieser Runde aufheben?')) host('clearEvents'); };
+  const sn = document.getElementById('snd'); if (sn) sn.onclick = () => { G.enableSound(); G.sound('deal'); render(); };
   const rv = document.getElementById('reveal'); if (rv) rv.onclick = () => host('reveal');
   const sh = document.getElementById('shap'); if (sh) sh.onclick = () => { if (G.state.phase !== 'results') host('phase', { phase: 'results' }); host('shapley'); };
   const rr = document.getElementById('resetRound'); if (rr) rr.onclick = () => {
-    const p = G.state.phase; if (p !== 'r1' && p !== 'r2') return G.toast('Gerade läuft keine Runde.', true);
-    if (confirm('Alle Zuteilungen dieser Runde löschen?')) host('resetRound', { round: p });
+    const p = G.state.phase; if (!G.isRound(p)) return G.toast('Gerade läuft keine Runde.', true);
+    if (confirm('Alle Zuteilungen, Preise und Ereignisse dieser Runde löschen?')) host('resetRound', { round: p });
   };
   const ra = document.getElementById('resetAll'); if (ra) ra.onclick = () => {
     if (confirm('Neues Spiel starten? Alle Ergebnisse werden gelöscht.')) host('reset', { keepPlayers: confirm('Mitspieler behalten? (OK = ja)') });

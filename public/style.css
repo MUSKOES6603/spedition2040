@@ -66,3 +66,34 @@ body.offline::before { content: "Verbindung unterbrochen – verbinde neu …"; 
   .totals { grid-template-columns: repeat(2, 1fr); }
   .order { min-width: calc(50% - 5px); }
 }
+
+/* ---------- Erweiterungen Spedition 2040 v2 ---------- */
+.order { display: flex; flex-direction: column; gap: 2px; cursor: pointer; }
+.order .money { font-size: 13px; color: var(--navy); margin-top: 2px; }
+.order.spot { background: #FFF8E1; box-shadow: 0 0 0 2px #D69E2E inset, 0 2px 6px rgba(20, 33, 61, .08); animation: spotglow 1.4s infinite; }
+@keyframes spotglow { 50% { box-shadow: 0 0 0 4px #F6C453 inset, 0 2px 10px rgba(214, 158, 46, .5); } }
+.pricebtns { display: flex; gap: 6px; margin-top: 6px; }
+.pricebtns button, .hubbtn { padding: 5px 10px; font-size: 13px; border-radius: 8px; background: var(--navy); color: #fff; }
+.hubbtn { margin-top: 6px; background: #D69E2E; color: var(--navy); align-self: flex-start; }
+.truck.broken { border: 3px solid var(--bad); background: repeating-linear-gradient(45deg, #FFF5F5, #FFF5F5 12px, #FED7D7 12px, #FED7D7 24px); }
+.hubring { transform-box: fill-box; transform-origin: center; animation: hubpulse 2s infinite; }
+@keyframes hubpulse { 0% { transform: scale(.7); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
+#evo { position: fixed; inset: 0; z-index: 80; display: none; align-items: center; justify-content: center; background: rgba(20, 33, 61, .55); padding: 16px; cursor: pointer; }
+#evo.show { display: flex; animation: evin .35s; }
+#evo .evbox { background: #fff; border-radius: 22px; padding: 22px 26px; display: flex; gap: 18px; align-items: center; max-width: 640px; border: 6px solid #E53E3E; box-shadow: 0 20px 60px rgba(0, 0, 0, .35); animation: shake .5s .2s; }
+#evo .evicon { font-size: 56px; }
+#evo .evtitle { font-size: 26px; font-weight: 900; color: #C53030; }
+#evo .evtext { font-size: 17px; margin-top: 4px; }
+#evo.big .evbox { max-width: 1100px; padding: 36px 44px; }
+#evo.big .evicon { font-size: 120px; }
+#evo.big .evtitle { font-size: 60px; }
+#evo.big .evtext { font-size: 30px; }
+@keyframes evin { from { opacity: 0; } }
+@keyframes shake { 20%, 60% { transform: translateX(-10px) rotate(-1deg); } 40%, 80% { transform: translateX(10px) rotate(1deg); } }
+#confetti { position: fixed; inset: 0; pointer-events: none; z-index: 90; }
+.timer.low { animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .6; } }
+
+.lockedlist { display: grid; gap: 6px; }
+.lrow { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; background: #fff; border-left: 6px solid; border-radius: 10px; padding: 7px 10px; font-size: 14px; opacity: .8; cursor: pointer; }
+.lrow .muted { margin-left: auto; }

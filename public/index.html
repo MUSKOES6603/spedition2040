@@ -11,6 +11,11 @@
   @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } .side { position: static; } }
   .join { max-width: 560px; margin: 30px auto; display: grid; gap: 16px; }
   .rules li { margin: 4px 0; }
+  .evpills { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
+  .evpill { background: #E53E3E; color: #fff; border-radius: 999px; padding: 4px 12px; font-weight: 700; font-size: 14px; }
+  .mini { display: grid; gap: 6px; }
+  .mini div { display: flex; justify-content: space-between; font-size: 15px; padding: 6px 10px; border-radius: 10px; background: #fff; border-left: 6px solid; }
+  .mini div.me { outline: 2px solid var(--orange); }
 </style>
 </head>
 <body>
@@ -34,24 +39,59 @@ async function join(name, team) {
 G.on(s => {
   // Nach Server-Neustart automatisch wieder beitreten
   if (me && !s.players.some(p => p.name === me.name && p.team === me.team)) G.api('join', me);
+  if (me) G.handleEvent(s.lastEvent, false);
+  // Auswahl verwerfen, wenn der Auftrag nicht mehr verfügbar ist
+  if (sel && G.isRound(s.phase) && !G.activeItems(s.phase).includes(sel.order)) sel = null;
   render();
 });
 G.connect();
 setInterval(() => { const t = document.getElementById('timer'); if (t) updateTimer(t); }, 500);
 setInterval(() => { if (me) G.api('ping'); }, 20000);
+document.addEventListener('click', () => { if (!G.soundOn) G.enableSound(); }, { once: true });
 
 function updateTimer(el) {
   const txt = G.timerText();
   el.textContent = txt; el.style.display = txt ? '' : 'none';
-  const s = G.state; el.classList.toggle('low', !!(s && s.timerEnds && s.timerEnds - G.now() < 60000));
+  const left = G.timeLeft();
+  el.classList.toggle('low', left !== null && left < 60);
 }
 
-function orderCard(o, extra = '') {
-  const T = G.meta.teams[o.team];
-  return `<button class="order ${extra}" data-order="${o.id}" style="border-color:${T.color}">
-    <b style="color:${T.color}">${o.id} · ${T.name}</b>
-    <span class="rt">${G.cityName(o.from)} → ${G.cityName(o.to)}</span>
-    <span class="pal">${o.p} Palette${o.p > 1 ? 'n' : ''}</span></button>`;
+function orderCard(id, round, extra = '') {
+  const s = G.state, m = G.meta, it = G.item(id);
+  const col = G.teamColor(it.team);
+  const own = it.team === me.team;
+  const plan = s.plans[round] || {};
+  const takenByOther = [it.base, it.base + '>', it.base + '<'].some(p => plan[p] && plan[p][0] !== me.team);
+  const showPrice = (round === 'r2' || round === 'r3') && !it.spot;
+  const price = showPrice ? G.priceOf(round, it.base) : 0;
+  let money = '';
+  if (it.spot) money = `<span class="money">⚡ ${G.eur(it.rev)} für den, der fährt</span>`;
+  else if (showPrice) {
+    const share = it.leg ? ' anteilig' : '';
+    money = own
+      ? `<span class="money">Erlös ${G.eur(it.rev)} · Frachtpreis <b>${G.eur(price)}</b>${share}</span>
+         ${!takenByOther ? `<span class="pricebtns"><button data-price="${it.base}" data-delta="-20">−20 €</button><button data-price="${it.base}" data-delta="20">+20 €</button></span>` : ''}`
+      : `<span class="money">Ihr bekommt <b>${G.eur(price)}</b>${share}</span>`;
+  } else money = `<span class="money">Erlös ${G.eur(it.rev)}</span>`;
+  let hub = '';
+  if (round === 'r3' && !it.spot && it.from !== m.hub && it.to !== m.hub || (round === 'r3' && it.leg)) {
+    const parts = [it.base, it.base + '>', it.base + '<'];
+    const free = !parts.some(p => plan[p]);
+    if (free) hub = it.leg ? `<button class="hubbtn" data-split="${it.base}" data-on="0">⤺ wieder direkt</button>` : `<button class="hubbtn" data-split="${it.base}" data-on="1">🔀 am Hub teilen</button>`;
+  }
+  const legTxt = it.leg === 1 ? ' · Teil ① bis Hub' : it.leg === 2 ? ' · Teil ② ab Hub' : '';
+  return `<div class="order ${it.spot ? 'spot' : ''} ${extra}" data-order="${id}" role="button" tabindex="0" style="border-color:${col}">
+    <b style="color:${col}">${G.itemTag(id)} · ${G.teamName(it.team)}${legTxt}</b>
+    <span class="rt">${G.cityName(it.from)} → ${G.cityName(it.to)}</span>
+    <span class="pal">${it.p} Palette${it.p > 1 ? 'n' : ''}</span>${money}${hub}</div>`;
+}
+
+function lockedRow(id, round) {
+  const s = G.state, it = G.item(id), tr = s.plans[round][id];
+  const own = it.team === me.team;
+  const price = it.spot ? '' : ` · ${own ? 'ihr zahlt' : ''} ${G.eur(G.priceOf(round, it.base))}${it.leg ? ' anteilig' : ''}`;
+  return `<div class="lrow locked" data-order="${id}" style="border-color:${G.teamColor(it.team)}"><b style="color:${G.teamColor(it.team)}">${G.itemTag(id)}</b>
+    <span>${it.from}→${it.to} · ${it.p}P${price}</span><span class="muted">bei ${G.teamName(tr[0])} · Lkw ${tr.split(':')[1]}</span></div>`;
 }
 
 function render() {
@@ -75,7 +115,7 @@ function render() {
 function renderJoin() {
   const m = G.meta;
   app.innerHTML = `<div class="wrap"><div class="join card">
-    <h1>Spedition 2040</h1>
+    <h1>🚚 Spedition 2040</h1>
     <p class="muted">Das Physical-Internet-Planspiel. Gib deinen Namen ein und wähle die Spedition, die dir zugeteilt wurde.</p>
     <input id="name" placeholder="Dein Vorname" maxlength="24" autocomplete="off">
     <div class="grid teams">${Object.entries(m.teams).map(([k, t]) =>
@@ -93,27 +133,30 @@ function renderJoin() {
 }
 
 function renderLobby() {
-  const s = G.state, m = G.meta;
+  const s = G.state, m = G.meta, E = m.econ;
   const mates = s.players.filter(p => p.team === me.team).map(p => G.esc(p.name)).join(', ');
   return `<div class="wrap"><div class="card"><h2>Gleich geht’s los</h2>
     <p>Dein Team: <b>${mates || '–'}</b></p>
     <ul class="rules">
       <li>Ein Lkw fasst <b>${m.cap} Paletten</b>, fährt max. <b>${G.fmt(m.maxKm)} km</b> pro Tour und kehrt zu eurem Depot zurück.</li>
       <li>Ihr teilt die Aufträge auf Lkw auf, die <b>Route berechnet die App</b> automatisch so kurz wie möglich.</li>
-      <li><b>Runde 1:</b> nur eure eigenen 5 Aufträge. <b>Runde 2:</b> alle 20 Aufträge liegen in einer offenen Frachtbörse.</li>
-      <li>Ziel: alle Aufträge ausliefern, mit möglichst wenigen Kilometern und Leerfahrten.</li>
-      <li>Bedienung: Auftrag antippen, dann Lkw antippen.</li>
+      <li><b>Ziel: maximaler Gewinn.</b> Jeder Auftrag bringt Erlös. Jeder km kostet ca. ${String(Math.round((E.costKm + E.co2Km * E.co2Price / 1000) * 100) / 100).replace('.', ',')} € (inkl. CO₂), jeder Lkw ${E.tourFix} € Fixkosten. Nicht gefahrene eigene Aufträge kosten ${E.penalty} € Strafe.</li>
+      <li><b>Runde 1:</b> nur eure eigenen 5 Aufträge.</li>
+      <li><b>Runde 2:</b> offene Frachtbörse. Ihr könnt Aufträge anderer Teams fahren und bekommt dafür deren <b>Frachtpreis</b>. Für eure eigenen Aufträge legt ihr den Preis fest (−20 € / +20 €).</li>
+      <li><b>Runde 3:</b> PI-Hub Frankfurt: Aufträge lassen sich dort teilen, zwei Lkw fahren je eine Teilstrecke (${E.hubFee} € Umschlag pro Palette).</li>
+      <li>Bedienung: Auftrag antippen, dann Lkw antippen. Und: Rechnet mit Überraschungen! 😈</li>
     </ul></div>
     <div class="card" style="margin-top:14px">${G.mapSvg([])}</div></div>`;
 }
 
 function truckBox(t, round) {
   const m = G.meta, r = t.result;
+  if (t.broken) return `<div class="truck broken"><h3><span>Lkw ${t.id.split(':')[1]}</span><span>🔧 Panne</span></h3><p class="muted" style="margin:0">Motorschaden – fällt diese Runde aus.</p></div>`;
   const target = sel && !t.orders.includes(sel.order) ? 'target' : '';
   const cls = r ? (r.ok ? 'ok' : 'bad') : '';
   const chips = t.orders.map(id => {
-    const o = m.orders[id];
-    return `<span class="chip ${sel && sel.order === id ? 'sel' : ''}" data-chip="${id}" style="background:${m.teams[o.team].color}">${id} ${o.from}→${o.to} · ${o.p}P</span>`;
+    const it = G.item(id);
+    return `<span class="chip ${sel && sel.order === id ? 'sel' : ''}" data-chip="${id}" style="background:${G.teamColor(it.team)}">${G.itemTag(id)} ${it.from}→${it.to} · ${it.p}P</span>`;
   }).join('');
   let info = `<p class="muted" style="margin:0">Leer – Auftrag antippen und dann hier tippen</p>`;
   if (r && r.ok) info = `<div class="routeline">${G.route(r.route)}</div>
@@ -127,50 +170,58 @@ function truckBox(t, round) {
 function renderRound(round) {
   const s = G.state, m = G.meta;
   const ev = s.eval[round], te = ev.teams[me.team], plan = s.plans[round];
-  const all = Object.values(m.orders);
-  const pool = all.filter(o => !plan[o.id] && (round === 'r2' || o.team === me.team));
-  const elsewhere = round === 'r2' ? all.filter(o => plan[o.id] && !plan[o.id].startsWith(me.team + ':')) : [];
-  // Lkw: alle belegten + ein leerer
+  const items = G.activeItems(round);
+  const pool = items.filter(id => { const it = G.item(id); return !plan[id] && (round !== 'r1' || it.team === me.team || it.spot); });
+  const elsewhere = round === 'r1' ? [] : items.filter(id => plan[id] && plan[id][0] !== me.team);
+  const ranking = Object.entries(ev.teams).sort((a, b) => b[1].profit - a[1].profit);
+  const rank = ranking.findIndex(([k]) => k === me.team) + 1;
+  const free = te.trucks.find(t => !t.orders.length && !t.broken);
+  const shown = te.trucks.filter(t => t.orders.length || t === free || t.broken);
   const used = te.trucks.filter(t => t.orders.length);
-  const free = te.trucks.find(t => !t.orders.length);
-  const shown = te.trucks.filter(t => t.orders.length || t === free);
   const goal = round === 'r1'
-    ? `<b>${te.assignedOwn} / 5</b> eigene Aufträge verplant`
-    : `<b>${ev.total.assigned} / 20</b> Aufträge im Netz verplant`;
+    ? `<b>${te.assignedOwn} / 5</b> eigene Aufträge verplant · nur eigene Aufträge und eigene Lkw`
+    : `<b>${ev.total.assigned} / ${ev.total.active}</b> Aufträge im Netz verplant · jeder Lkw darf jede Palette laden` + (round === 'r3' ? ' · 🔀 Hub Frankfurt aktiv' : '');
+  const pills = s.events[round].map(id => `<span class="evpill">${m.events[id].icon} ${m.events[id].title.replace('!', '')}</span>`).join('');
   const totals = `<div class="totals">
-    <div class="card"><div class="v">${G.fmt(te.km)}</div><div class="l">km eures Teams</div></div>
-    <div class="card"><div class="v">${G.fmt(te.emptyKm)}</div><div class="l">davon Leer-km</div></div>
-    <div class="card"><div class="v">${te.tours}</div><div class="l">Touren</div></div>
-    <div class="card"><div class="v">${te.util} %</div><div class="l">Auslastung</div></div></div>`;
-  const allBox = round === 'r2' ? `<div class="card"><h3>Alle Speditionen zusammen</h3>
-    <div class="kpis" style="margin-top:8px"><span><b>${G.fmt(ev.total.km)}</b> km</span><span><b>${G.fmt(ev.total.emptyKm)}</b> leer</span><span><b>${ev.total.tours}</b> Touren</span><span><b>${ev.total.assigned}/20</b> verplant</span></div>
-    <p class="muted" style="margin:8px 0 0">In Runde 2 zählt das gemeinsame Ergebnis. Runde 1 zum Vergleich: ${G.fmt(s.eval.r1.total.km)} km.</p></div>` : '';
+    <div class="card"><div class="v" style="color:${te.profit >= 0 ? 'var(--good)' : 'var(--bad)'}">${G.eur(te.profit, true)}</div><div class="l">Gewinn eures Teams · Platz ${rank}</div></div>
+    <div class="card"><div class="v">${G.fmt(te.km)}</div><div class="l">km · davon ${G.fmt(te.emptyKm)} leer</div></div>
+    <div class="card"><div class="v">${te.tours}</div><div class="l">Lkw im Einsatz · ${te.util} % Auslastung</div></div>
+    <div class="card"><div class="v">${G.co2(te.co2)}</div><div class="l">CO₂</div></div></div>
+    <p class="muted" style="font-size:14px;margin:8px 0 0">Erlös ${G.eur(te.revenue)} · Frachtzahlungen erhalten ${G.eur(te.received)} · gezahlt ${G.eur(te.paid)} · Fahrkosten ${G.eur(te.cost)}${te.hubFees ? ` · Hub ${G.eur(te.hubFees)}` : ''}${te.penalty ? ` · <span class="warn">Strafen ${G.eur(te.penalty)}</span>` : ''}</p>`;
+  const mini = `<div class="card"><h3 style="margin-bottom:8px">Rangliste</h3><div class="mini">${ranking.map(([k, x], i) =>
+    `<div class="${k === me.team ? 'me' : ''}" style="border-color:${m.teams[k].color}"><span>${['🥇', '🥈', '🥉', '4.'][i]} ${m.teams[k].name}</span><b>${G.eur(x.profit, true)}</b></div>`).join('')}</div>
+    ${round !== 'r1' ? `<p class="muted" style="margin:8px 0 0;font-size:14px">Netzwerk gesamt: <b>${G.eur(ev.total.profit, true)}</b> · ${G.fmt(ev.total.km)} km</p>` : ''}</div>`;
   const routes = te.trucks.filter(t => t.result && t.result.ok).map(t => ({ team: me.team, route: t.result.route }));
-  const help = sel ? `<div class="sticky-help"><span><b>${sel.order}</b> ausgewählt – tippe auf einen Lkw</span><span>
+  const help = sel ? `<div class="sticky-help"><span><b>${G.itemTag(sel.order)}</b> ausgewählt – tippe auf einen Lkw</span><span>
       ${sel.inTruck ? '<button id="back">Zurück in die Börse</button>' : ''} <button id="cancel" style="background:#fff">Abbrechen</button></span></div>` : '';
   return `<div class="wrap"><div class="layout"><div>
-    <p style="margin:4px 0 12px">${goal}${round === 'r1' ? ' · nur eigene Aufträge und eigene Lkw' : ' · jeder Lkw darf jede Palette laden'}</p>
+    ${pills ? `<div class="evpills">${pills}</div>` : ''}
+    <p style="margin:4px 0 12px">${goal}</p>
     ${totals}
-    <div class="section-title"><h2>${round === 'r2' ? 'Offene Frachtbörse' : 'Eure offenen Aufträge'}</h2><span class="muted">${pool.length} offen</span></div>
-    <div class="orders">${pool.map(o => orderCard(o, sel && sel.order === o.id ? 'sel' : '')).join('') || '<p class="muted">Alles verplant 👍</p>'}</div>
+    <div class="section-title"><h2>${round === 'r1' ? 'Eure offenen Aufträge' : 'Offene Frachtbörse'}</h2><span class="muted">${pool.length} offen</span></div>
+    <div class="orders">${pool.map(id => orderCard(id, round, sel && sel.order === id ? 'sel' : '')).join('') || '<p class="muted">Alles verplant 👍</p>'}</div>
     <div class="section-title"><h2>Eure Lkw</h2><span class="muted">${used.length} im Einsatz</span></div>
     <div class="grid trucks">${shown.map(t => truckBox(t, round)).join('')}</div>
     ${elsewhere.length ? `<div class="section-title"><h2>Fahren gerade andere Speditionen</h2><span class="muted">zum Verhandeln</span></div>
-      <div class="orders">${elsewhere.map(o => orderCard(o, 'locked').replace('</button>', `<span class="pal" style="display:block">bei ${m.teams[plan[o.id][0]].name}, Lkw ${plan[o.id].split(':')[1]}</span></button>`)).join('')}</div>` : ''}
-    </div><div class="side">${allBox}<div class="card"><h3 style="margin-bottom:6px">Eure Routen</h3>${G.mapSvg(routes, { small: true })}</div>
-    ${round === 'r2' && s.log.length ? `<div class="card log"><h3 style="color:var(--navy);margin-bottom:6px">Frachtbörse</h3>${s.log.slice().reverse().map(l => '<div>' + G.esc(l.text) + '</div>').join('')}</div>` : ''}
+      <div class="lockedlist">${elsewhere.map(id => lockedRow(id, round)).join('')}</div>` : ''}
+    </div><div class="side">${mini}<div class="card"><h3 style="margin-bottom:6px">Eure Routen</h3>${G.mapSvg(routes, { small: true, hub: round === 'r3', blocked: G.blockedEdges(round) })}</div>
+    ${round !== 'r1' && s.log.length ? `<div class="card log"><h3 style="color:var(--navy);margin-bottom:6px">📣 Live-Ticker</h3>${s.log.slice().reverse().slice(0, 8).map(l => '<div>' + G.esc(l.text) + '</div>').join('')}</div>` : ''}
     </div></div></div>${help}`;
 }
 
 function renderResults() {
   const s = G.state, m = G.meta;
-  const r1 = s.eval.r1, r2 = s.eval.r2;
-  const row = (l, a, b, unit = '') => `<tr><td>${l}</td><td class="num">${a}${unit}</td><td class="num">${b}${unit}</td></tr>`;
+  const rounds = ['r1', 'r2', 'r3'].filter(r => s.eval[r].total.km > 0);
+  const names = { r1: 'Runde 1', r2: 'Runde 2', r3: 'Runde 3' };
+  const row = (l, f) => `<tr><td>${l}</td>${rounds.map(r => `<td class="num">${f(r)}</td>`).join('')}</tr>`;
+  const mine = r => s.eval[r].teams[me.team];
+  const place = r => Object.values(s.eval[r].teams).filter(x => x.profit > mine(r).profit).length + 1;
   return `<div class="wrap"><div class="card"><h2>Auswertung</h2>
-    <table style="margin-top:12px"><tr><th>Alle Speditionen</th><th class="num">Runde 1</th><th class="num">Runde 2</th></tr>
-    ${row('Touren', r1.total.tours, r2.total.tours)}${row('Kilometer', G.fmt(r1.total.km), G.fmt(r2.total.km))}
-    ${row('davon leer', G.fmt(r1.total.emptyKm), G.fmt(r2.total.emptyKm))}${row('Auslastung', r1.total.util, r2.total.util, ' %')}</table>
-    ${r1.total.km && r2.total.km ? `<p style="font-size:20px"><b>${Math.round((1 - r2.total.km / r1.total.km) * 100)} % weniger Kilometer</b> durch das gemeinsame Netz.</p>` : ''}
+    <table style="margin-top:12px"><tr><th>Alle Speditionen</th>${rounds.map(r => `<th class="num">${names[r]}</th>`).join('')}</tr>
+    ${row('Gewinn gesamt', r => G.eur(s.eval[r].total.profit, true))}${row('Kilometer', r => G.fmt(s.eval[r].total.km))}
+    ${row('davon leer', r => G.fmt(s.eval[r].total.emptyKm))}${row('CO₂', r => G.co2(s.eval[r].total.co2))}
+    <tr><th>${m.teams[me.team].name}</th>${rounds.map(() => '<th></th>').join('')}</tr>
+    ${row('Euer Gewinn', r => `<b>${G.eur(mine(r).profit, true)}</b>`)}${row('Platz', r => place(r) + '.')}</table>
     <p class="muted">Schaut nach vorne auf den Beamer – gleich besprechen wir, was passiert ist.</p></div></div>`;
 }
 
@@ -179,6 +230,8 @@ function bind() {
     if (b.classList.contains('locked')) return G.toast('Dieser Auftrag gehört gerade einem anderen Team – verhandelt!', true);
     const id = b.dataset.order; sel = sel && sel.order === id ? null : { order: id, inTruck: false }; render();
   });
+  app.querySelectorAll('[data-price]').forEach(b => b.onclick = e => { e.stopPropagation(); G.api('price', { order: b.dataset.price, delta: Number(b.dataset.delta) }); });
+  app.querySelectorAll('[data-split]').forEach(b => b.onclick = e => { e.stopPropagation(); sel = null; G.api('split', { order: b.dataset.split, on: b.dataset.on === '1' }); });
   app.querySelectorAll('[data-chip]').forEach(c => c.onclick = e => {
     e.stopPropagation(); const id = c.dataset.chip; sel = sel && sel.order === id ? null : { order: id, inTruck: true }; render();
   });

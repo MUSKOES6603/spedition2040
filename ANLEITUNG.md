@@ -1,4 +1,4 @@
-# Spedition 2040 – Anleitung für den Mac
+# Spedition 2040 – Anleitung
 
 Das Planspiel läuft als kleine Webseite auf deinem MacBook. Alle anderen spielen im Browser mit (Laptop, iPad, Handy), ohne etwas zu installieren. Der Beamer zeigt das Dashboard mit Live-Karte.
 
@@ -29,15 +29,34 @@ Das Terminal-Fenster während des Spiels offen lassen. Beenden mit `Ctrl + C`.
 | --- | --- | --- |
 | Beitreten | Warteraum | Alle scannen den QR-Code, geben ihren Namen ein und wählen ihre Spedition (Nord, Ost, West, Süd) |
 | Runde 1 | ▶ Runde 1 (12 Min.) | Jedes Team verteilt nur seine 5 Aufträge auf eigene Lkw |
-| Runde 2 | ▶ Runde 2 (15 Min.) | Offene Frachtbörse: Alle 20 Aufträge sind sichtbar, jeder Lkw darf jede Palette laden |
-| Auswertung | Auswertung | Vergleich Runde 1 vs. 2 mit Karten; „Musterlösung zeigen“ blendet die Referenzwerte ein |
-| Runde 3 (optional) | Faire Verteilung (Shapley) | Nach eurer Verhandlung: Tabelle, wie die Ersparnis nach dem Shapley-Wert verteilt würde |
+| Runde 2 | ▶ Runde 2 (15 Min.) | Offene Frachtbörse: Alle 20 Aufträge sind sichtbar, jeder Lkw darf jede Palette laden. Die auftraggebende Spedition legt den Frachtpreis fest (−20 € / +20 €) und zahlt ihn an das Team, das fährt |
+| Runde 3 | ▶ Runde 3 · Hub (12 Min.) | PI-Hub Frankfurt: Aufträge können am Hub geteilt werden, zwei Lkw fahren je eine Teilstrecke (20 € Umschlag pro Palette) |
+| Auswertung | 🏁 Auswertung | Vergleich der Runden (km, Gewinn, CO₂, Gewinn je Team) mit Karten, Konfetti und Fanfare; „Musterlösung“ blendet Referenzwerte und -routen ein |
+| Shapley (optional) | Shapley | Tabelle, wie die Ersparnis nach dem Shapley-Wert verteilt würde |
 
+**Vorher auf dem Beamer „🔇 Sound einschalten“ klicken** (Browser erlauben Ton erst nach einem Klick): Startsignal, Ticken in den letzten 10 Sekunden, „STOPP!“, Alarm bei Ereignissen, „Ka-ching“ bei Deals.
+
+### Wirtschaft
+- Erlös je Auftrag = Paletten × Direkt-km × 0,80 €. Kosten: 1,00 €/km + CO₂ (0,8 kg/km × 150 €/t) + 150 € je eingesetztem Lkw. Nicht gefahrene eigene Aufträge: 150 € Vertragsstrafe.
+- Rangliste nach Gewinn je Team, zusätzlich Gewinn des ganzen Netzwerks.
+
+### Ereignisse (Buttons in der zweiten Zeile, nur während einer Runde)
+| Ereignis | Wirkung |
+| --- | --- |
+| 🚧 Vollsperrung A7 | Hamburg → Frankfurt/Stuttgart/München je +150 km (nochmal klicken = aufheben) |
+| ⛽ Dieselpreis-Schock | +40 % Kosten pro km |
+| 🌍 CO₂-Preis verdreifacht | 450 statt 150 €/t |
+| ⚡ Spot-Aufträge | 3 Eilaufträge mit 1,8-fachem Satz, wer zuerst lädt, kassiert |
+| 🔧 Lkw-Panne | Ein zufälliger beladener Lkw fällt aus, seine Aufträge gehen zurück in die Börse |
+
+Ereignisse erscheinen als großes Pop-up auf Beamer und Handys. „Alle aufheben“ setzt Ereignisse und Pannen der laufenden Runde zurück.
+
+### Sonstiges
 - **Bedienung für Mitspieler:** Auftrag antippen, dann Lkw antippen. Die App berechnet automatisch die kürzeste Route (max. 4 Paletten gleichzeitig, max. 1.600 km, Rückkehr zum Depot).
 - **Mehrere Geräte pro Team** sehen und bearbeiten denselben Plan live.
-- **Runde 2:** Einen Auftrag, den gerade ein anderes Team fährt, kann man nicht wegnehmen. Das andere Team muss ihn erst freigeben. Das ist Absicht: So müssen die Teams verhandeln.
-- **+1 Min.** verlängert den Timer, **Aktuelle Runde leeren** setzt nur die laufende Runde zurück, **Neues Spiel** löscht alles.
-- Musterlösung: Runde 1 14.335 km (4.495 leer), Runde 2 8.245 km (0 leer) = −42 %.
+- Einen Auftrag, den gerade ein anderes Team fährt, kann man nicht wegnehmen. Das andere Team muss ihn erst freigeben. Das ist Absicht: So müssen die Teams verhandeln.
+- **+1 Min.** verlängert den Timer, **Runde leeren** setzt nur die laufende Runde zurück, **Neues Spiel** löscht alles.
+- Musterlösung (ohne Ereignisse): Runde 1 14.335 km / −805 €, Runde 2 8.245 km / +6.915 €, Runde 3 7.710 km / +7.225 €. Neu berechnen: `node tools/optimize.js --shapley` (dauert ca. 5 Min.).
 
 ## 4. Wenn sich die anderen nicht verbinden können
 
